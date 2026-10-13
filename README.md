@@ -1,5 +1,7 @@
 # Kasir Jastip
 
+Nama aplikasi dapat diganti lewat env `APP_NAME`.
+
 Aplikasi kasir untuk jasa titip (jastip): pencatatan pesanan, nota thermal ala minimarket, dan flag status pesanan.
 
 - Pengaturan: nama toko, produk, periode, data customer

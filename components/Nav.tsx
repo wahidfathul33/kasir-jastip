@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/app";
 import Link from "next/link";
 import { logout } from "@/lib/actions";
 
@@ -14,7 +15,7 @@ export default function Nav() {
   return (
     <header className="no-print border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-1 gap-y-1 px-4 py-2">
-        <span className="mr-3 text-base font-bold text-emerald-700">Kasir Jastip</span>
+        <span className="mr-3 text-base font-bold text-emerald-700">{APP_NAME}</span>
         {links.map((l) => (
           <Link key={l.href} href={l.href} className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100">
             {l.label}
