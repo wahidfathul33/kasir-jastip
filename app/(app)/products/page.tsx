@@ -1,4 +1,5 @@
 import ConfirmButton from "@/components/ConfirmButton";
+import MoneyInput from "@/components/MoneyInput";
 import { deleteProduct, saveProduct, toggleProduct } from "@/lib/actions";
 import { rupiah } from "@/lib/format";
 import { getProducts } from "@/lib/queries";
@@ -10,7 +11,7 @@ export default async function ProductsPage() {
       <h1 className="text-xl font-bold">Produk</h1>
       <form action={saveProduct} className="card grid items-end gap-3 sm:grid-cols-[1fr_180px_auto]">
         <div><label className="label" htmlFor="name">Nama produk</label><input id="name" name="name" required className="input" /></div>
-        <div><label className="label" htmlFor="price">Harga jual (Rp)</label><input id="price" name="price" inputMode="numeric" defaultValue="0" className="input" /></div>
+        <div><label className="label" htmlFor="price">Harga jual (Rp)</label><MoneyInput id="price" name="price" defaultValue="0" /></div>
         <button className="btn">Tambah</button>
       </form>
       <div className="card overflow-x-auto p-0">
@@ -24,7 +25,7 @@ export default async function ProductsPage() {
                   <form action={saveProduct} className="grid gap-2 sm:grid-cols-[1fr_160px_auto]">
                     <input type="hidden" name="id" value={p.id} />
                     <input name="name" defaultValue={p.name} required className="input" aria-label="Nama" />
-                    <input name="price" inputMode="numeric" defaultValue={p.price} className="input" aria-label={`Harga ${rupiah(p.price)}`} />
+                    <MoneyInput name="price" defaultValue={p.price} aria-label={`Harga ${rupiah(p.price)}`} />
                     <button className="btn-ghost">Simpan</button>
                   </form>
                 </td>

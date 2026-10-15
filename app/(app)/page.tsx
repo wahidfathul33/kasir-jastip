@@ -1,7 +1,7 @@
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
 import { fmtDateTime, orderCode, rupiah } from "@/lib/format";
-import { getActivePeriod, getOrders, getPeriods, orderTotal } from "@/lib/queries";
+import { getActivePeriod, getOrders, getPeriods, feeTotal, orderTotal } from "@/lib/queries";
 import { STATUSES, STATUS_LABEL, type Status } from "@/lib/types";
 
 type SP = Promise<{ periode?: string; status?: string; q?: string }>;
@@ -22,6 +22,9 @@ export default async function Home({ searchParams }: { searchParams: SP }) {
   const orders = await getOrders({ periodId, status, search });
 
   const totalAll = orders.reduce((s, o) => s + orderTotal(o), 0);
+  const totalGoods = orders.reduce((s, o) => s + o.subtotal, 0);
+  const totalFee = orders.reduce((s, o) => s + feeTotal(o), 0);
+  const totalShipping = orders.reduce((s, o) => s + o.shipping, 0);
   const unpaid = orders.filter((o) => o.status === "belum_bayar").length;
   const counts = Object.fromEntries(STATUSES.map((s) => [s, orders.filter((o) => o.status === s).length]));
 
@@ -29,7 +32,8 @@ export default async function Home({ searchParams }: { searchParams: SP }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="card"><div className="text-xs text-slate-500">Jumlah pesanan</div><div className="text-2xl font-bold">{orders.length}</div></div>
-        <div className="card"><div className="text-xs text-slate-500">Total nilai</div><div className="text-2xl font-bold">{rupiah(totalAll)}</div></div>
+        <div className="card"><div className="text-xs text-slate-500">Total nilai</div><div className="text-2xl font-bold">{rupiah(totalAll)}</div>
+          <div className="mt-1 text-xs text-slate-500">Barang {rupiah(totalGoods)} · Jasa {rupiah(totalFee)}{totalShipping > 0 && <> · Ongkir {rupiah(totalShipping)}</>}</div></div>
         <div className="card"><div className="text-xs text-slate-500">Belum dibayar</div><div className="text-2xl font-bold text-red-600">{unpaid}</div></div>
         <div className="card"><div className="text-xs text-slate-500">Selesai</div><div className="text-2xl font-bold text-green-700">{counts.selesai}</div></div>
       </div>

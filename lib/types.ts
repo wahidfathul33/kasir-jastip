@@ -44,7 +44,10 @@ export type Order = {
   customer_id: number | null;
   customer_name: string;
   status: Status;
-  fee: number;
+  fee: number; // tarif jasa satuan
+  fee_qty: number;
+  box_fee: number; // tarif jasa per box
+  box_qty: number;
   shipping: number;
   paid_amount: number;
   payment_method: string;

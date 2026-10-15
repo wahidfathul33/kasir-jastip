@@ -2,9 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createOrder } from "@/lib/actions";
+import { createOrder, updateOrder } from "@/lib/actions";
+import MoneyInput from "@/components/MoneyInput";
 import { rupiah } from "@/lib/format";
-import { PAYMENT_METHODS, type Customer, type Period, type Product } from "@/lib/types";
+import { PAYMENT_METHODS, type Customer, type Order, type OrderItem, type Period, type Product } from "@/lib/types";
 
 type Line = { key: number; productId: number | null; name: string; price: string; qty: string };
 
@@ -20,27 +21,39 @@ export default function OrderForm({
   customers,
   periods,
   defaultPeriodId,
+  editing,
 }: {
   products: Product[];
   customers: Customer[];
   periods: Period[];
   defaultPeriodId: number | null;
+  editing?: { order: Order; items: OrderItem[] };
 }) {
+  const o = editing?.order;
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
-  const [customerId, setCustomerId] = useState<string>("");
-  const [customerName, setCustomerName] = useState("");
-  const [periodId, setPeriodId] = useState<string>(defaultPeriodId ? String(defaultPeriodId) : "");
-  const [lines, setLines] = useState<Line[]>([emptyLine()]);
-  const [fee, setFee] = useState("0");
-  const [shipping, setShipping] = useState("0");
-  const [paid, setPaid] = useState("0");
-  const [method, setMethod] = useState<string>("Tunai");
-  const [note, setNote] = useState("");
+  const [customerId, setCustomerId] = useState<string>(o?.customer_id ? String(o.customer_id) : "");
+  const [customerName, setCustomerName] = useState(o && !o.customer_id ? o.customer_name : "");
+  const [periodId, setPeriodId] = useState<string>(o ? (o.period_id ? String(o.period_id) : "") : defaultPeriodId ? String(defaultPeriodId) : "");
+  const [lines, setLines] = useState<Line[]>(
+    editing
+      ? editing.items.map((i) => ({ key: seq++, productId: i.product_id, name: i.name, price: String(i.price), qty: String(i.qty) }))
+      : [emptyLine()],
+  );
+  const [fee, setFee] = useState(String(o?.fee ?? 0));
+  const [feeQty, setFeeQty] = useState(String(o?.fee_qty ?? 1));
+  const [boxFee, setBoxFee] = useState(String(o?.box_fee ?? 15000));
+  const [boxQty, setBoxQty] = useState(String(o?.box_qty ?? 0));
+  const [shipping, setShipping] = useState(String(o?.shipping ?? 0));
+  const [paid, setPaid] = useState(String(o?.paid_amount ?? 0));
+  const [method, setMethod] = useState<string>(o?.payment_method ?? "Tunai");
+  const [note, setNote] = useState(o?.note ?? "");
 
   const subtotal = useMemo(() => lines.reduce((s, l) => s + toInt(l.price) * (toInt(l.qty) || 0), 0), [lines]);
-  const total = subtotal + toInt(fee) + toInt(shipping);
+  const feeSum = toInt(fee) * toInt(feeQty);
+  const boxSum = toInt(boxFee) * toInt(boxQty);
+  const total = subtotal + feeSum + boxSum + toInt(shipping);
   const diff = toInt(paid) - total;
 
   const update = (key: number, patch: Partial<Line>) =>
@@ -60,19 +73,23 @@ export default function OrderForm({
     if (items.length === 0) return setError("Tambahkan minimal satu barang");
     if (items.some((i) => i.qty < 1)) return setError("Jumlah barang minimal 1");
     start(async () => {
-      const res = await createOrder({
+      const input = {
         customerId: customerId ? Number(customerId) : null,
         customerName,
         periodId: periodId ? Number(periodId) : null,
         items,
         fee: toInt(fee),
+        feeQty: toInt(feeQty),
+        boxFee: toInt(boxFee),
+        boxQty: toInt(boxQty),
         shipping: toInt(shipping),
         paid: toInt(paid),
         method,
         note,
-      });
+      };
+      const res = editing ? await updateOrder(editing.order.id, input) : await createOrder(input);
       if (res.error || !res.id) return setError(res.error ?? "Gagal menyimpan pesanan");
-      router.push(`/orders/${res.id}?baru=1`);
+      router.push(editing ? `/orders/${res.id}?diubah=1` : `/orders/${res.id}?baru=1`);
     });
   }
 
@@ -121,7 +138,7 @@ export default function OrderForm({
               </div>
               <div className="col-span-6 sm:col-span-4 lg:col-span-2">
                 <label className="label">Harga</label>
-                <input className="input" inputMode="numeric" value={l.price} onChange={(e) => update(l.key, { price: e.target.value.replace(/[^\d]/g, "") })} />
+                <MoneyInput value={l.price} onValueChange={(v) => update(l.key, { price: v })} />
               </div>
               <div className="col-span-3 lg:col-span-1">
                 <label className="label">Qty</label>
@@ -139,14 +156,33 @@ export default function OrderForm({
 
       <div className="card h-fit space-y-3">
         <h2 className="font-semibold">Pembayaran</h2>
-        <div className="flex justify-between text-sm"><span>Subtotal</span><span>{rupiah(subtotal)}</span></div>
-        <div>
-          <label className="label" htmlFor="fee">Biaya jasa</label>
-          <input id="fee" className="input" inputMode="numeric" value={fee} onChange={(e) => setFee(e.target.value.replace(/[^\d]/g, ""))} />
+        <div className="flex justify-between text-sm"><span>Total barang</span><span>{rupiah(subtotal)}</span></div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="col-span-2">
+            <label className="label" htmlFor="fee">Biaya jasa satuan</label>
+            <MoneyInput id="fee" value={fee} onValueChange={setFee} />
+          </div>
+          <div>
+            <label className="label" htmlFor="feeqty">Qty satuan</label>
+            <input id="feeqty" className="input" inputMode="numeric" value={feeQty} onChange={(e) => setFeeQty(e.target.value.replace(/[^\d]/g, ""))} />
+          </div>
         </div>
+        <div className="flex justify-between text-sm"><span>Jasa satuan ({toInt(feeQty)} x {rupiah(toInt(fee))})</span><span>{rupiah(feeSum)}</span></div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="col-span-2">
+            <label className="label" htmlFor="boxfee">Biaya jasa box</label>
+            <MoneyInput id="boxfee" value={boxFee} onValueChange={setBoxFee} />
+          </div>
+          <div>
+            <label className="label" htmlFor="boxqty">Qty box</label>
+            <input id="boxqty" className="input" inputMode="numeric" value={boxQty} onChange={(e) => setBoxQty(e.target.value.replace(/[^\d]/g, ""))} />
+          </div>
+        </div>
+        <div className="flex justify-between text-sm"><span>Jasa box ({toInt(boxQty)} x {rupiah(toInt(boxFee))})</span><span>{rupiah(boxSum)}</span></div>
+        <div className="flex justify-between text-sm font-medium"><span>Total jasa</span><span>{rupiah(feeSum + boxSum)}</span></div>
         <div>
           <label className="label" htmlFor="ship">Ongkir</label>
-          <input id="ship" className="input" inputMode="numeric" value={shipping} onChange={(e) => setShipping(e.target.value.replace(/[^\d]/g, ""))} />
+          <MoneyInput id="ship" value={shipping} onValueChange={setShipping} />
         </div>
         <div className="flex justify-between border-t border-slate-200 pt-2 text-lg font-bold"><span>Total</span><span>{rupiah(total)}</span></div>
         <div>
@@ -157,7 +193,7 @@ export default function OrderForm({
         </div>
         <div>
           <label className="label" htmlFor="paid">Jumlah dibayar</label>
-          <input id="paid" className="input" inputMode="numeric" value={paid} onChange={(e) => setPaid(e.target.value.replace(/[^\d]/g, ""))} />
+          <MoneyInput id="paid" value={paid} onValueChange={setPaid} />
           <button type="button" className="mt-1 text-xs text-emerald-700 hover:underline cursor-pointer" onClick={() => setPaid(String(total))}>Uang pas</button>
         </div>
         <div className="flex justify-between text-sm">
@@ -165,7 +201,7 @@ export default function OrderForm({
           <span className={diff >= 0 ? "text-green-700" : "text-red-600"}>{rupiah(Math.abs(diff))}</span>
         </div>
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-        <button type="button" className="btn w-full" disabled={pending} onClick={submit}>{pending ? "Menyimpan..." : "Simpan pesanan"}</button>
+        <button type="button" className="btn w-full" disabled={pending} onClick={submit}>{pending ? "Menyimpan..." : editing ? "Simpan perubahan" : "Simpan pesanan"}</button>
       </div>
     </div>
   );

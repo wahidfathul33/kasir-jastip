@@ -60,6 +60,9 @@ const statements = [
     price integer NOT NULL CHECK (price >= 0),
     qty integer NOT NULL CHECK (qty > 0)
   )`,
+  `ALTER TABLE orders ADD COLUMN IF NOT EXISTS fee_qty integer NOT NULL DEFAULT 1 CHECK (fee_qty >= 0)`,
+  `ALTER TABLE orders ADD COLUMN IF NOT EXISTS box_fee integer NOT NULL DEFAULT 15000 CHECK (box_fee >= 0)`,
+  `ALTER TABLE orders ADD COLUMN IF NOT EXISTS box_qty integer NOT NULL DEFAULT 0 CHECK (box_qty >= 0)`,
   `CREATE INDEX IF NOT EXISTS orders_period_idx ON orders(period_id)`,
   `CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status)`,
   `CREATE INDEX IF NOT EXISTS order_items_order_idx ON order_items(order_id)`,

@@ -134,6 +134,9 @@ export type NewOrderInput = {
   periodId: number | null;
   items: { productId: number | null; name: string; price: number; qty: number }[];
   fee: number;
+  feeQty: number;
+  boxFee: number;
+  boxQty: number;
   shipping: number;
   paid: number;
   method: string;
@@ -145,7 +148,7 @@ const clampInt = (n: unknown, max = 2_000_000_000) => {
   return Number.isFinite(v) && v >= 0 && v <= max ? v : NaN;
 };
 
-export async function createOrder(input: NewOrderInput): Promise<{ id?: number; error?: string }> {
+async function parseOrder(input: NewOrderInput) {
   const items = (input.items ?? [])
     .map((i) => ({
       product_id: i.productId && Number.isInteger(i.productId) ? i.productId : null,
@@ -159,11 +162,14 @@ export async function createOrder(input: NewOrderInput): Promise<{ id?: number; 
     return { error: "Harga atau jumlah barang tidak valid" };
 
   const fee = clampInt(input.fee);
+  const feeQty = clampInt(input.feeQty, 100000);
+  const boxFee = clampInt(input.boxFee);
+  const boxQty = clampInt(input.boxQty, 100000);
   const shipping = clampInt(input.shipping);
   const paid = clampInt(input.paid);
-  if ([fee, shipping, paid].some(Number.isNaN)) return { error: "Nominal biaya/pembayaran tidak valid" };
+  if ([fee, feeQty, boxFee, boxQty, shipping, paid].some(Number.isNaN)) return { error: "Nominal biaya/pembayaran tidak valid" };
 
-  const total = items.reduce((s, i) => s + i.price * i.qty, 0) + fee + shipping;
+  const total = items.reduce((s, i) => s + i.price * i.qty, 0) + fee * feeQty + boxFee * boxQty + shipping;
   const status: Status = paid >= total ? "dibayar" : "belum_bayar";
   const method = (PAYMENT_METHODS as readonly string[]).includes(input.method) ? input.method : "Tunai";
 
@@ -175,20 +181,53 @@ export async function createOrder(input: NewOrderInput): Promise<{ id?: number; 
     else customerId = null;
   }
   const periodId = input.periodId && Number.isInteger(input.periodId) ? input.periodId : null;
+  const note = String(input.note ?? "").trim().slice(0, 300);
+
+  return { items, fee, feeQty, boxFee, boxQty, shipping, paid, status, method, customerId, customerName, periodId, note };
+}
+
+export async function createOrder(input: NewOrderInput): Promise<{ id?: number; error?: string }> {
+  const d = await parseOrder(input);
+  if ("error" in d) return { error: d.error };
 
   const rows = await q<{ order_id: number }>`
     WITH o AS (
-      INSERT INTO orders (period_id, customer_id, customer_name, status, fee, shipping, paid_amount, payment_method, note)
-      VALUES (${periodId}, ${customerId}, ${customerName}, ${status}, ${fee}, ${shipping}, ${paid}, ${method},
-              ${String(input.note ?? "").trim().slice(0, 300)})
+      INSERT INTO orders (period_id, customer_id, customer_name, status, fee, fee_qty, box_fee, box_qty, shipping, paid_amount, payment_method, note)
+      VALUES (${d.periodId}, ${d.customerId}, ${d.customerName}, ${d.status}, ${d.fee}, ${d.feeQty}, ${d.boxFee}, ${d.boxQty}, ${d.shipping}, ${d.paid}, ${d.method}, ${d.note})
       RETURNING id
     )
     INSERT INTO order_items (order_id, product_id, name, price, qty)
     SELECT o.id, (i->>'product_id')::int, i->>'name', (i->>'price')::int, (i->>'qty')::int
-    FROM o, jsonb_array_elements(${JSON.stringify(items)}::jsonb) AS i
+    FROM o, jsonb_array_elements(${JSON.stringify(d.items)}::jsonb) AS i
     RETURNING order_id`;
   revalidatePath("/");
   return { id: rows[0].order_id };
+}
+
+// Edit hanya diperbolehkan selama status masih "belum_bayar"; dijaga di WHERE agar atomik.
+export async function updateOrder(id: number, input: NewOrderInput): Promise<{ id?: number; error?: string }> {
+  if (!Number.isInteger(id) || id < 1) return { error: "Pesanan tidak ditemukan" };
+  const d = await parseOrder(input);
+  if ("error" in d) return { error: d.error };
+
+  const rows = await q<{ order_id: number }>`
+    WITH o AS (
+      UPDATE orders SET period_id = ${d.periodId}, customer_id = ${d.customerId}, customer_name = ${d.customerName},
+        status = ${d.status}, fee = ${d.fee}, fee_qty = ${d.feeQty}, box_fee = ${d.boxFee}, box_qty = ${d.boxQty},
+        shipping = ${d.shipping}, paid_amount = ${d.paid}, payment_method = ${d.method}, note = ${d.note}, updated_at = now()
+      WHERE id = ${id} AND status = 'belum_bayar'
+      RETURNING id
+    ), del AS (
+      DELETE FROM order_items WHERE order_id IN (SELECT id FROM o)
+    )
+    INSERT INTO order_items (order_id, product_id, name, price, qty)
+    SELECT o.id, (i->>'product_id')::int, i->>'name', (i->>'price')::int, (i->>'qty')::int
+    FROM o, jsonb_array_elements(${JSON.stringify(d.items)}::jsonb) AS i
+    RETURNING order_id`;
+  if (!rows[0]) return { error: "Pesanan tidak bisa diedit karena sudah dibayar atau tidak ditemukan" };
+  revalidatePath("/");
+  revalidatePath(`/orders/${id}`);
+  return { id };
 }
 
 export async function setOrderStatus(f: FormData) {
@@ -207,7 +246,7 @@ export async function payOrder(f: FormData) {
   const m = (PAYMENT_METHODS as readonly string[]).includes(method) ? method : "Tunai";
   // Lunasi: paid_amount = total, dan naikkan status dari belum_bayar -> dibayar.
   await q`UPDATE orders o SET
-      paid_amount = GREATEST(o.paid_amount, COALESCE((SELECT SUM(i.price * i.qty) FROM order_items i WHERE i.order_id = o.id), 0) + o.fee + o.shipping),
+      paid_amount = GREATEST(o.paid_amount, COALESCE((SELECT SUM(i.price * i.qty) FROM order_items i WHERE i.order_id = o.id), 0) + o.fee * o.fee_qty + o.box_fee * o.box_qty + o.shipping),
       payment_method = ${m},
       status = CASE WHEN o.status = 'belum_bayar' THEN 'dibayar' ELSE o.status END,
       updated_at = now()

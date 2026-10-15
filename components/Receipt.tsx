@@ -33,8 +33,19 @@ export default function Receipt({ order, items, settings }: { order: Order; item
           </div>
         ))}
         <div className="sep" />
-        <div className="row"><span>Subtotal</span><span>{num(order.subtotal)}</span></div>
-        {order.fee > 0 && <div className="row"><span>Biaya Jasa</span><span>{num(order.fee)}</span></div>}
+        <div className="row"><span>Total Barang</span><span>{num(order.subtotal)}</span></div>
+        {order.fee * order.fee_qty > 0 && (
+          <div className="row">
+            <span>Jasa {order.fee_qty} x {num(order.fee)}</span>
+            <span>{num(order.fee * order.fee_qty)}</span>
+          </div>
+        )}
+        {order.box_fee * order.box_qty > 0 && (
+          <div className="row">
+            <span>Jasa Box {order.box_qty} x {num(order.box_fee)}</span>
+            <span>{num(order.box_fee * order.box_qty)}</span>
+          </div>
+        )}
         {order.shipping > 0 && <div className="row"><span>Ongkir</span><span>{num(order.shipping)}</span></div>}
         <div className="row" style={{ fontWeight: 700, fontSize: 14 }}><span>TOTAL</span><span>{num(total)}</span></div>
         <div className="row"><span>{order.payment_method.toUpperCase()}</span><span>{num(order.paid_amount)}</span></div>
