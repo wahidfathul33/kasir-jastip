@@ -24,6 +24,7 @@ export default async function OrderPage({
   const { order, items } = data;
   const total = orderTotal(order);
   const unpaid = order.paid_amount < total;
+  const canDelete = order.status === "belum_bayar" && order.paid_amount === 0;
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -73,10 +74,14 @@ export default async function OrderPage({
         <div className="flex flex-wrap gap-2">
           <PrintButton auto={!!baru} />
           {order.status === "belum_bayar" && <Link href={`/orders/${order.id}/edit`} className="btn-ghost">Edit pesanan</Link>}
-          <form action={deleteOrder}>
-            <input type="hidden" name="id" value={order.id} />
-            <ConfirmButton message="Hapus pesanan ini? Tindakan tidak bisa dibatalkan.">Hapus pesanan</ConfirmButton>
-          </form>
+          {canDelete ? (
+            <form action={deleteOrder}>
+              <input type="hidden" name="id" value={order.id} />
+              <ConfirmButton message="Hapus pesanan ini? Tindakan tidak bisa dibatalkan.">Hapus pesanan</ConfirmButton>
+            </form>
+          ) : (
+            <span className="self-center text-xs text-slate-500">Pesanan yang sudah dibayar tidak bisa dihapus.</span>
+          )}
         </div>
       </div>
 

@@ -251,8 +251,15 @@ export async function payOrder(f: FormData) {
   revalidatePath(`/orders/${id}`);
 }
 
+// Hanya pesanan yang belum dibayar sama sekali (status belum_bayar dan tanpa pembayaran) yang boleh dihapus; dijaga di WHERE agar atomik.
 export async function deleteOrder(f: FormData) {
-  await q`DELETE FROM orders WHERE id = ${int(f, "id")}`;
+  const id = int(f, "id");
+  const rows = await q`DELETE FROM orders WHERE id = ${id} AND status = 'belum_bayar' AND paid_amount = 0 RETURNING id`;
+  if (rows.length === 0) {
+    // Sudah dibayar -> kembali ke detail pesanan; sudah terhapus -> ke daftar.
+    const exists = (await q`SELECT 1 FROM orders WHERE id = ${id}`).length > 0;
+    redirect(exists ? `/orders/${id}` : "/");
+  }
   revalidatePath("/");
   redirect("/");
 }
