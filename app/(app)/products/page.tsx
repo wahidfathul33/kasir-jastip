@@ -1,49 +1,62 @@
 import ConfirmButton from "@/components/ConfirmButton";
+import DataTable, { type DataRow } from "@/components/DataTable";
+import FormDialog from "@/components/FormDialog";
 import MoneyInput from "@/components/MoneyInput";
+import SwitchForm from "@/components/SwitchForm";
 import { deleteProduct, saveProduct, toggleProduct } from "@/lib/actions";
 import { rupiah } from "@/lib/format";
 import { getProducts } from "@/lib/queries";
+import type { Product } from "@/lib/types";
+
+function ProductForm({ p }: { p?: Product }) {
+  return (
+    <form action={saveProduct} className="space-y-3">
+      {p && <input type="hidden" name="id" value={p.id} />}
+      <div><label className="label" htmlFor={`name-${p?.id ?? "baru"}`}>Nama produk</label><input id={`name-${p?.id ?? "baru"}`} name="name" required defaultValue={p?.name} className="input" /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="label">Harga jual (Rp)</label><MoneyInput name="price" defaultValue={p?.price ?? 0} /></div>
+        <div><label className="label">Jasa per qty (Rp)</label><MoneyInput name="fee" defaultValue={p?.fee ?? 0} /></div>
+      </div>
+      <div className="flex justify-end"><button className="btn">Simpan</button></div>
+    </form>
+  );
+}
 
 export default async function ProductsPage() {
   const products = await getProducts();
+  const rows: DataRow[] = products.map((p) => ({
+    key: p.id,
+    search: p.name,
+    cells: [
+      <span key="n" className={p.is_active ? "" : "text-slate-400"}>{p.name}</span>,
+      rupiah(p.price),
+      rupiah(p.fee),
+      <SwitchForm key="s" action={toggleProduct} id={p.id} checked={p.is_active} label={`${p.is_active ? "Nonaktifkan" : "Aktifkan"} ${p.name}`} />,
+      <div key="a" className="flex justify-end gap-2">
+        <FormDialog trigger="Edit" title={`Edit ${p.name}`}><ProductForm p={p} /></FormDialog>
+        <form action={deleteProduct}>
+          <input type="hidden" name="id" value={p.id} />
+          <ConfirmButton message={`Hapus produk ${p.name}? Riwayat pesanan tetap tersimpan.`}>Hapus</ConfirmButton>
+        </form>
+      </div>,
+    ],
+  }));
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Produk</h1>
-      <form action={saveProduct} className="card grid items-end gap-3 sm:grid-cols-[1fr_180px_180px_auto]">
-        <div><label className="label" htmlFor="name">Nama produk</label><input id="name" name="name" required className="input" /></div>
-        <div><label className="label" htmlFor="price">Harga jual (Rp)</label><MoneyInput id="price" name="price" defaultValue="0" /></div>
-        <div><label className="label" htmlFor="fee">Jasa per qty (Rp)</label><MoneyInput id="fee" name="fee" defaultValue="0" /></div>
-        <button className="btn">Tambah</button>
-      </form>
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50"><tr><th className="th">Produk</th><th className="th">Harga · Jasa</th><th className="th">Aktif</th><th className="th"></th></tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {products.length === 0 && <tr><td colSpan={4} className="td py-8 text-center text-slate-500">Belum ada produk.</td></tr>}
-            {products.map((p) => (
-              <tr key={p.id}>
-                <td className="td" colSpan={2}>
-                  <form action={saveProduct} className="grid gap-2 sm:grid-cols-[1fr_140px_140px_auto]">
-                    <input type="hidden" name="id" value={p.id} />
-                    <input name="name" defaultValue={p.name} required className="input" aria-label="Nama" />
-                    <MoneyInput name="price" defaultValue={p.price} aria-label={`Harga ${rupiah(p.price)}`} />
-                    <MoneyInput name="fee" defaultValue={p.fee} aria-label={`Jasa ${rupiah(p.fee)}`} />
-                    <button className="btn-ghost">Simpan</button>
-                  </form>
-                </td>
-                <td className="td">
-                  <form action={toggleProduct}><input type="hidden" name="id" value={p.id} />
-                    <button className={p.is_active ? "btn-ghost" : "btn-danger"}>{p.is_active ? "Aktif" : "Nonaktif"}</button></form>
-                </td>
-                <td className="td text-right">
-                  <form action={deleteProduct}><input type="hidden" name="id" value={p.id} />
-                    <ConfirmButton message={`Hapus produk ${p.name}? Riwayat pesanan tetap tersimpan.`}>Hapus</ConfirmButton></form>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={[
+          { label: "Produk" },
+          { label: "Harga", className: "w-36 text-right" },
+          { label: "Jasa per qty", className: "w-36 text-right" },
+          { label: "Aktif", className: "w-24 text-center" },
+          { label: "Aksi", className: "w-44 text-right" },
+        ]}
+        rows={rows}
+        searchPlaceholder="Cari produk..."
+        emptyText="Belum ada produk."
+        toolbar={<FormDialog trigger="+ Tambah produk" triggerClassName="btn" title="Tambah produk"><ProductForm /></FormDialog>}
+      />
     </div>
   );
 }

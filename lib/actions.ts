@@ -117,9 +117,10 @@ export async function savePeriod(f: FormData) {
   revalidatePath("/", "layout");
 }
 
-export async function activatePeriod(f: FormData) {
+// Switch periode: menyalakan periode mematikan yang lain; mematikan periode aktif berarti tidak ada periode aktif.
+export async function togglePeriod(f: FormData) {
   const id = int(f, "id");
-  await q`UPDATE periods SET is_active = (id = ${id})`;
+  await q`UPDATE periods SET is_active = (id = ${id} AND NOT is_active)`;
   revalidatePath("/", "layout");
 }
 

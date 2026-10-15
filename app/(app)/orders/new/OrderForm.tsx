@@ -4,13 +4,14 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createOrder, updateOrder } from "@/lib/actions";
 import MoneyInput from "@/components/MoneyInput";
+import ProductPicker from "@/components/ProductPicker";
 import { rupiah } from "@/lib/format";
 import { PAYMENT_METHODS, type Customer, type Order, type OrderItem, type Period, type Product } from "@/lib/types";
 
-type Line = { key: number; productId: number | null; name: string; note: string; price: string; fee: string; qty: string };
+type Line = { key: number; productId: number | null; name: string; note: string; showNote: boolean; price: string; fee: string; qty: string };
 
 let seq = 1;
-const emptyLine = (): Line => ({ key: seq++, productId: null, name: "", note: "", price: "", fee: "", qty: "1" });
+const emptyLine = (): Line => ({ key: seq++, productId: null, name: "", note: "", showNote: false, price: "", fee: "", qty: "1" });
 const toInt = (v: string) => {
   const n = Math.round(Number(v.replace(/[^\d]/g, "")));
   return Number.isFinite(n) ? n : 0;
@@ -38,7 +39,7 @@ export default function OrderForm({
   const [periodId, setPeriodId] = useState<string>(o ? (o.period_id ? String(o.period_id) : "") : defaultPeriodId ? String(defaultPeriodId) : "");
   const [lines, setLines] = useState<Line[]>(
     editing
-      ? editing.items.map((i) => ({ key: seq++, productId: i.product_id, name: i.name, note: i.note, price: String(i.price), fee: String(i.fee), qty: String(i.qty) }))
+      ? editing.items.map((i) => ({ key: seq++, productId: i.product_id, name: i.name, note: i.note, showNote: !!i.note, price: String(i.price), fee: String(i.fee), qty: String(i.qty) }))
       : [emptyLine()],
   );
   const [shipping, setShipping] = useState(String(o?.shipping ?? 0));
@@ -54,8 +55,7 @@ export default function OrderForm({
   const update = (key: number, patch: Partial<Line>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
-  function pickProduct(key: number, value: string) {
-    const p = products.find((x) => String(x.id) === value);
+  function pickProduct(key: number, p: Product | null) {
     if (p) update(key, { productId: p.id, name: p.name, price: String(p.price), fee: String(p.fee) });
     else update(key, { productId: null });
   }
@@ -118,10 +118,7 @@ export default function OrderForm({
             <div key={l.key} className="grid grid-cols-12 items-end gap-2 border-b border-slate-100 pb-3">
               <div className="col-span-12 sm:col-span-4 lg:col-span-3">
                 <label className="label">Produk</label>
-                <select className="input" value={l.productId ?? ""} onChange={(e) => pickProduct(l.key, e.target.value)}>
-                  <option value="">— Barang manual —</option>
-                  {products.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-                </select>
+                <ProductPicker products={products} value={l.productId} onPick={(p) => pickProduct(l.key, p)} />
               </div>
               <div className="col-span-12 sm:col-span-8 lg:col-span-3">
                 <label className="label">Nama barang</label>
@@ -144,8 +141,24 @@ export default function OrderForm({
                   onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [emptyLine()]))}>✕</button>
               </div>
               <div className="col-span-12">
-                <label className="label">Catatan barang (detail jenis, mis. isi 1 box)</label>
-                <input className="input" value={l.note} onChange={(e) => update(l.key, { note: e.target.value })} placeholder="Opsional" />
+                <button
+                  type="button"
+                  className="flex cursor-pointer items-center gap-1 text-xs font-medium text-emerald-700 hover:underline"
+                  aria-expanded={l.showNote}
+                  onClick={() => update(l.key, { showNote: !l.showNote })}
+                >
+                  <span aria-hidden>{l.showNote ? "▾" : "▸"}</span>
+                  Catatan barang{!l.showNote && l.note.trim() ? ` · ${l.note.trim()}` : ""}
+                </button>
+                {l.showNote && (
+                  <input
+                    className="input mt-1"
+                    value={l.note}
+                    onChange={(e) => update(l.key, { note: e.target.value })}
+                    placeholder="Detail jenis, mis. isi 1 box"
+                    aria-label="Catatan barang"
+                  />
+                )}
               </div>
             </div>
           ))}
