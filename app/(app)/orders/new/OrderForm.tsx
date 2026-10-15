@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createOrder, updateOrder } from "@/lib/actions";
 import MoneyInput from "@/components/MoneyInput";
-import ProductPicker from "@/components/ProductPicker";
+import SearchSelect from "@/components/SearchSelect";
 import { rupiah } from "@/lib/format";
 import { PAYMENT_METHODS, type Customer, type Order, type OrderItem, type Period, type Product } from "@/lib/types";
 
@@ -46,6 +46,9 @@ export default function OrderForm({
   const [paid, setPaid] = useState(String(o?.paid_amount ?? 0));
   const [method, setMethod] = useState<string>(o?.payment_method ?? "Tunai");
   const [note, setNote] = useState(o?.note ?? "");
+
+  const productOptions = useMemo(() => products.map((p) => ({ ...p, meta: rupiah(p.price) })), [products]);
+  const customerOptions = useMemo(() => customers.map((c) => ({ ...c, meta: c.phone })), [customers]);
 
   const subtotal = useMemo(() => lines.reduce((s, l) => s + toInt(l.price) * (toInt(l.qty) || 0), 0), [lines]);
   const feeSum = useMemo(() => lines.reduce((s, l) => s + toInt(l.fee) * (toInt(l.qty) || 0), 0), [lines]);
@@ -90,10 +93,7 @@ export default function OrderForm({
         <div className="card grid gap-3 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="customer">Customer tersimpan</label>
-            <select id="customer" className="input" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-              <option value="">— Umum / ketik manual —</option>
-              {customers.map((c) => (<option key={c.id} value={c.id}>{c.name}{c.phone ? ` (${c.phone})` : ""}</option>))}
-            </select>
+            <SearchSelect id="customer" items={customerOptions} value={customerId ? Number(customerId) : null} onPick={(c) => setCustomerId(c ? String(c.id) : "")} emptyLabel="— Umum / ketik manual —" searchPlaceholder="Cari customer..." />
           </div>
           <div>
             <label className="label" htmlFor="cname">Nama customer (jika tidak dipilih)</label>
@@ -118,7 +118,7 @@ export default function OrderForm({
             <div key={l.key} className="grid grid-cols-12 items-end gap-2 border-b border-slate-100 pb-3">
               <div className="col-span-12 sm:col-span-4 lg:col-span-3">
                 <label className="label">Produk</label>
-                <ProductPicker products={products} value={l.productId} onPick={(p) => pickProduct(l.key, p)} />
+                <SearchSelect items={productOptions} value={l.productId} onPick={(p) => pickProduct(l.key, p)} emptyLabel="— Barang manual —" searchPlaceholder="Cari produk..." />
               </div>
               <div className="col-span-12 sm:col-span-8 lg:col-span-3">
                 <label className="label">Nama barang</label>

@@ -1,18 +1,25 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { rupiah } from "@/lib/format";
-import type { Product } from "@/lib/types";
+export type Option = { id: number; name: string; meta?: string };
 
-// Pilihan produk dengan kotak pencarian (mirip select2).
-export default function ProductPicker({
-  products,
+// Select dengan kotak pencarian (mirip select2). Pilihan pertama (emptyLabel) mengosongkan nilai.
+export default function SearchSelect<T extends Option>({
+  items,
   value,
   onPick,
+  emptyLabel,
+  searchPlaceholder = "Cari...",
+  id,
+  disabled,
 }: {
-  products: Product[];
+  items: T[];
   value: number | null;
-  onPick: (product: Product | null) => void;
+  onPick: (item: T | null) => void;
+  emptyLabel: string;
+  searchPlaceholder?: string;
+  id?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -21,11 +28,11 @@ export default function ProductPicker({
   const search = useRef<HTMLInputElement>(null);
   const listId = useId();
 
-  const selected = products.find((p) => p.id === value) ?? null;
+  const selected = items.find((p) => p.id === value) ?? null;
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return term ? products.filter((p) => p.name.toLowerCase().includes(term)) : products;
-  }, [products, query]);
+    return term ? items.filter((p) => `${p.name} ${p.meta ?? ""}`.toLowerCase().includes(term)) : items;
+  }, [items, query]);
 
   useEffect(() => {
     if (!open) return;
@@ -43,12 +50,12 @@ export default function ProductPicker({
     setTimeout(() => search.current?.focus(), 0);
   }
 
-  function choose(p: Product | null) {
+  function choose(p: T | null) {
     onPick(p);
     setOpen(false);
   }
 
-  // Indeks 0 = "Barang manual", lalu hasil pencarian.
+  // Indeks 0 = pilihan kosong, lalu hasil pencarian.
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") return setOpen(false);
     if (e.key === "ArrowDown") {
@@ -67,13 +74,15 @@ export default function ProductPicker({
     <div ref={root} className="relative" onKeyDown={onKeyDown}>
       <button
         type="button"
-        className="input flex cursor-pointer items-center justify-between gap-2 text-left"
+        id={id}
+        disabled={disabled}
+        className="input flex cursor-pointer items-center disabled:cursor-not-allowed disabled:bg-slate-100 justify-between gap-2 text-left"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
         onClick={toggle}
       >
-        <span className={`truncate ${selected ? "" : "text-slate-500"}`}>{selected ? selected.name : "— Barang manual —"}</span>
+        <span className={`truncate ${selected ? "" : "text-slate-500"}`}>{selected ? selected.name : emptyLabel}</span>
         <span aria-hidden className="text-xs text-slate-400">▾</span>
       </button>
       {open && (
@@ -82,8 +91,8 @@ export default function ProductPicker({
             <input
               ref={search}
               className="input"
-              placeholder="Cari produk..."
-              aria-label="Cari produk"
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -99,7 +108,7 @@ export default function ProductPicker({
               onMouseEnter={() => setActive(0)}
               onClick={() => choose(null)}
             >
-              — Barang manual —
+              {emptyLabel}
             </li>
             {results.map((p, i) => (
               <li
@@ -111,10 +120,10 @@ export default function ProductPicker({
                 onClick={() => choose(p)}
               >
                 <span className="truncate">{p.name}</span>
-                <span className="shrink-0 text-xs text-slate-500">{rupiah(p.price)}</span>
+                <span className="shrink-0 text-xs text-slate-500">{p.meta}</span>
               </li>
             ))}
-            {results.length === 0 && <li className="px-3 py-2 text-slate-500">Produk tidak ditemukan</li>}
+            {results.length === 0 && <li className="px-3 py-2 text-slate-500">Tidak ditemukan</li>}
           </ul>
         </div>
       )}
