@@ -4,6 +4,10 @@ import { STATUS_LABEL, type Order, type OrderItem, type Settings } from "@/lib/t
 
 export default function Receipt({ order, items, settings }: { order: Order; items: OrderItem[]; settings: Settings }) {
   const total = orderTotal(order);
+  // Jasa dikelompokkan per tarif, mis. "Jasa 2 x 3.000" dan "Jasa 1 x 15.000".
+  const feeByRate = new Map<number, number>();
+  for (const i of items) if (i.fee > 0) feeByRate.set(i.fee, (feeByRate.get(i.fee) ?? 0) + i.qty);
+  const feeLines = [...feeByRate].map(([fee, qty]) => ({ fee, qty }));
   const diff = order.paid_amount - total;
   const width = settings.paper_width === 58 ? "58mm" : "80mm";
   const chars = settings.paper_width === 58 ? 32 : 42;
@@ -26,6 +30,7 @@ export default function Receipt({ order, items, settings }: { order: Order; item
         {items.map((i) => (
           <div key={i.id} style={{ marginBottom: 3 }}>
             <div style={{ wordBreak: "break-word" }}>{i.name}</div>
+            {i.note && <div style={{ wordBreak: "break-word", fontSize: 11 }}>&nbsp;&nbsp;({i.note})</div>}
             <div className="row">
               <span>&nbsp;&nbsp;{i.qty} x {num(i.price)}</span>
               <span>{num(i.price * i.qty)}</span>
@@ -34,18 +39,9 @@ export default function Receipt({ order, items, settings }: { order: Order; item
         ))}
         <div className="sep" />
         <div className="row"><span>Total Barang</span><span>{num(order.subtotal)}</span></div>
-        {order.fee * order.fee_qty > 0 && (
-          <div className="row">
-            <span>Jasa {order.fee_qty} x {num(order.fee)}</span>
-            <span>{num(order.fee * order.fee_qty)}</span>
-          </div>
-        )}
-        {order.box_fee * order.box_qty > 0 && (
-          <div className="row">
-            <span>Jasa Box {order.box_qty} x {num(order.box_fee)}</span>
-            <span>{num(order.box_fee * order.box_qty)}</span>
-          </div>
-        )}
+        {feeLines.map((f) => (
+          <div key={f.fee} className="row"><span>Jasa {f.qty} x {num(f.fee)}</span><span>{num(f.fee * f.qty)}</span></div>
+        ))}
         {order.shipping > 0 && <div className="row"><span>Ongkir</span><span>{num(order.shipping)}</span></div>}
         <div className="row" style={{ fontWeight: 700, fontSize: 14 }}><span>TOTAL</span><span>{num(total)}</span></div>
         <div className="row"><span>{order.payment_method.toUpperCase()}</span><span>{num(order.paid_amount)}</span></div>

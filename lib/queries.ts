@@ -14,8 +14,8 @@ export const getActivePeriod = async () =>
 
 export const getProducts = (onlyActive = false) =>
   onlyActive
-    ? q<Product>`SELECT id, name, price, is_active FROM products WHERE is_active ORDER BY name`
-    : q<Product>`SELECT id, name, price, is_active FROM products ORDER BY name`;
+    ? q<Product>`SELECT id, name, price, fee, is_active FROM products WHERE is_active ORDER BY name`
+    : q<Product>`SELECT id, name, price, fee, is_active FROM products ORDER BY name`;
 
 export const getCustomers = () =>
   q<Customer>`SELECT id, name, phone, address FROM customers ORDER BY name`;
@@ -27,8 +27,9 @@ export async function getOrders(filter: { periodId?: number; status?: Status; se
   const search = filter.search ? `%${filter.search}%` : null;
   return q<Order>`
     SELECT o.id, o.period_id, p.name AS period_name, o.customer_id, o.customer_name, o.status,
-      o.fee, o.fee_qty, o.box_fee, o.box_qty, o.shipping, o.paid_amount, o.payment_method, o.note, o.created_at,
-      COALESCE((SELECT SUM(i.price * i.qty) FROM order_items i WHERE i.order_id = o.id), 0)::int AS subtotal
+      o.shipping, o.paid_amount, o.payment_method, o.note, o.created_at,
+      COALESCE((SELECT SUM(i.price * i.qty) FROM order_items i WHERE i.order_id = o.id), 0)::int AS subtotal,
+      COALESCE((SELECT SUM(i.fee * i.qty) FROM order_items i WHERE i.order_id = o.id), 0)::int AS fee_total
     FROM orders o LEFT JOIN periods p ON p.id = o.period_id
     WHERE (${periodId}::int IS NULL OR o.period_id = ${periodId}::int)
       AND (${status}::text IS NULL OR o.status = ${status}::text)
@@ -40,15 +41,14 @@ export async function getOrders(filter: { periodId?: number; status?: Status; se
 export async function getOrder(id: number) {
   const rows = await q<Order>`
     SELECT o.id, o.period_id, p.name AS period_name, o.customer_id, o.customer_name, o.status,
-      o.fee, o.fee_qty, o.box_fee, o.box_qty, o.shipping, o.paid_amount, o.payment_method, o.note, o.created_at,
-      COALESCE((SELECT SUM(i.price * i.qty) FROM order_items i WHERE i.order_id = o.id), 0)::int AS subtotal
+      o.shipping, o.paid_amount, o.payment_method, o.note, o.created_at,
+      COALESCE((SELECT SUM(i.price * i.qty) FROM order_items i WHERE i.order_id = o.id), 0)::int AS subtotal,
+      COALESCE((SELECT SUM(i.fee * i.qty) FROM order_items i WHERE i.order_id = o.id), 0)::int AS fee_total
     FROM orders o LEFT JOIN periods p ON p.id = o.period_id
     WHERE o.id = ${id}`;
   if (!rows[0]) return null;
-  const items = await q<OrderItem>`SELECT id, product_id, name, price, qty FROM order_items WHERE order_id = ${id} ORDER BY id`;
+  const items = await q<OrderItem>`SELECT id, product_id, name, note, price, fee, qty FROM order_items WHERE order_id = ${id} ORDER BY id`;
   return { order: rows[0], items };
 }
 
-export const feeTotal = (o: Pick<Order, "fee" | "fee_qty" | "box_fee" | "box_qty">) => o.fee * o.fee_qty + o.box_fee * o.box_qty;
-export const orderTotal = (o: Pick<Order, "subtotal" | "fee" | "fee_qty" | "box_fee" | "box_qty" | "shipping">) => o.subtotal + feeTotal(o) + o.shipping;
-
+export const orderTotal = (o: Pick<Order, "subtotal" | "fee_total" | "shipping">) => o.subtotal + o.fee_total + o.shipping;

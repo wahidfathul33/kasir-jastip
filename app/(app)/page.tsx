@@ -1,7 +1,7 @@
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
 import { fmtDateTime, orderCode, rupiah } from "@/lib/format";
-import { getActivePeriod, getOrders, getPeriods, feeTotal, orderTotal } from "@/lib/queries";
+import { getActivePeriod, getOrders, getPeriods, orderTotal } from "@/lib/queries";
 import { STATUSES, STATUS_LABEL, type Status } from "@/lib/types";
 
 type SP = Promise<{ periode?: string; status?: string; q?: string }>;
@@ -23,7 +23,7 @@ export default async function Home({ searchParams }: { searchParams: SP }) {
 
   const totalAll = orders.reduce((s, o) => s + orderTotal(o), 0);
   const totalGoods = orders.reduce((s, o) => s + o.subtotal, 0);
-  const totalFee = orders.reduce((s, o) => s + feeTotal(o), 0);
+  const totalFee = orders.reduce((s, o) => s + o.fee_total, 0);
   const totalShipping = orders.reduce((s, o) => s + o.shipping, 0);
   const unpaid = orders.filter((o) => o.status === "belum_bayar").length;
   const counts = Object.fromEntries(STATUSES.map((s) => [s, orders.filter((o) => o.status === s).length]));

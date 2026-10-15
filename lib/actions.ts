@@ -58,8 +58,9 @@ export async function saveProduct(f: FormData) {
   const name = str(f, "name", 120);
   if (!name) return;
   const price = int(f, "price");
-  if (id) await q`UPDATE products SET name = ${name}, price = ${price} WHERE id = ${id}`;
-  else await q`INSERT INTO products (name, price) VALUES (${name}, ${price})`;
+  const fee = int(f, "fee");
+  if (id) await q`UPDATE products SET name = ${name}, price = ${price}, fee = ${fee} WHERE id = ${id}`;
+  else await q`INSERT INTO products (name, price, fee) VALUES (${name}, ${price}, ${fee})`;
   revalidatePath("/products");
   revalidatePath("/orders/new");
 }
@@ -132,11 +133,7 @@ export type NewOrderInput = {
   customerId: number | null;
   customerName: string;
   periodId: number | null;
-  items: { productId: number | null; name: string; price: number; qty: number }[];
-  fee: number;
-  feeQty: number;
-  boxFee: number;
-  boxQty: number;
+  items: { productId: number | null; name: string; note?: string; price: number; fee?: number; qty: number }[];
   shipping: number;
   paid: number;
   method: string;
@@ -153,23 +150,21 @@ async function parseOrder(input: NewOrderInput) {
     .map((i) => ({
       product_id: i.productId && Number.isInteger(i.productId) ? i.productId : null,
       name: String(i.name ?? "").trim().slice(0, 120),
+      note: String(i.note ?? "").trim().slice(0, 200),
       price: clampInt(i.price),
+      fee: clampInt(i.fee ?? 0),
       qty: clampInt(i.qty, 100000),
     }))
     .filter((i) => i.name);
   if (items.length === 0) return { error: "Tambahkan minimal satu barang" };
-  if (items.some((i) => Number.isNaN(i.price) || Number.isNaN(i.qty) || i.qty < 1))
-    return { error: "Harga atau jumlah barang tidak valid" };
+  if (items.some((i) => Number.isNaN(i.price) || Number.isNaN(i.fee) || Number.isNaN(i.qty) || i.qty < 1))
+    return { error: "Harga, jasa, atau jumlah barang tidak valid" };
 
-  const fee = clampInt(input.fee);
-  const feeQty = clampInt(input.feeQty, 100000);
-  const boxFee = clampInt(input.boxFee);
-  const boxQty = clampInt(input.boxQty, 100000);
   const shipping = clampInt(input.shipping);
   const paid = clampInt(input.paid);
-  if ([fee, feeQty, boxFee, boxQty, shipping, paid].some(Number.isNaN)) return { error: "Nominal biaya/pembayaran tidak valid" };
+  if ([shipping, paid].some(Number.isNaN)) return { error: "Nominal biaya/pembayaran tidak valid" };
 
-  const total = items.reduce((s, i) => s + i.price * i.qty, 0) + fee * feeQty + boxFee * boxQty + shipping;
+  const total = items.reduce((s, i) => s + (i.price + i.fee) * i.qty, 0) + shipping;
   const status: Status = paid >= total ? "dibayar" : "belum_bayar";
   const method = (PAYMENT_METHODS as readonly string[]).includes(input.method) ? input.method : "Tunai";
 
@@ -183,7 +178,7 @@ async function parseOrder(input: NewOrderInput) {
   const periodId = input.periodId && Number.isInteger(input.periodId) ? input.periodId : null;
   const note = String(input.note ?? "").trim().slice(0, 300);
 
-  return { items, fee, feeQty, boxFee, boxQty, shipping, paid, status, method, customerId, customerName, periodId, note };
+  return { items, shipping, paid, status, method, customerId, customerName, periodId, note };
 }
 
 export async function createOrder(input: NewOrderInput): Promise<{ id?: number; error?: string }> {
@@ -192,12 +187,12 @@ export async function createOrder(input: NewOrderInput): Promise<{ id?: number; 
 
   const rows = await q<{ order_id: number }>`
     WITH o AS (
-      INSERT INTO orders (period_id, customer_id, customer_name, status, fee, fee_qty, box_fee, box_qty, shipping, paid_amount, payment_method, note)
-      VALUES (${d.periodId}, ${d.customerId}, ${d.customerName}, ${d.status}, ${d.fee}, ${d.feeQty}, ${d.boxFee}, ${d.boxQty}, ${d.shipping}, ${d.paid}, ${d.method}, ${d.note})
+      INSERT INTO orders (period_id, customer_id, customer_name, status, shipping, paid_amount, payment_method, note)
+      VALUES (${d.periodId}, ${d.customerId}, ${d.customerName}, ${d.status}, ${d.shipping}, ${d.paid}, ${d.method}, ${d.note})
       RETURNING id
     )
-    INSERT INTO order_items (order_id, product_id, name, price, qty)
-    SELECT o.id, (i->>'product_id')::int, i->>'name', (i->>'price')::int, (i->>'qty')::int
+    INSERT INTO order_items (order_id, product_id, name, note, price, fee, qty)
+    SELECT o.id, (i->>'product_id')::int, i->>'name', i->>'note', (i->>'price')::int, (i->>'fee')::int, (i->>'qty')::int
     FROM o, jsonb_array_elements(${JSON.stringify(d.items)}::jsonb) AS i
     RETURNING order_id`;
   revalidatePath("/");
@@ -213,15 +208,15 @@ export async function updateOrder(id: number, input: NewOrderInput): Promise<{ i
   const rows = await q<{ order_id: number }>`
     WITH o AS (
       UPDATE orders SET period_id = ${d.periodId}, customer_id = ${d.customerId}, customer_name = ${d.customerName},
-        status = ${d.status}, fee = ${d.fee}, fee_qty = ${d.feeQty}, box_fee = ${d.boxFee}, box_qty = ${d.boxQty},
+        status = ${d.status},
         shipping = ${d.shipping}, paid_amount = ${d.paid}, payment_method = ${d.method}, note = ${d.note}, updated_at = now()
       WHERE id = ${id} AND status = 'belum_bayar'
       RETURNING id
     ), del AS (
       DELETE FROM order_items WHERE order_id IN (SELECT id FROM o)
     )
-    INSERT INTO order_items (order_id, product_id, name, price, qty)
-    SELECT o.id, (i->>'product_id')::int, i->>'name', (i->>'price')::int, (i->>'qty')::int
+    INSERT INTO order_items (order_id, product_id, name, note, price, fee, qty)
+    SELECT o.id, (i->>'product_id')::int, i->>'name', i->>'note', (i->>'price')::int, (i->>'fee')::int, (i->>'qty')::int
     FROM o, jsonb_array_elements(${JSON.stringify(d.items)}::jsonb) AS i
     RETURNING order_id`;
   if (!rows[0]) return { error: "Pesanan tidak bisa diedit karena sudah dibayar atau tidak ditemukan" };
@@ -246,7 +241,7 @@ export async function payOrder(f: FormData) {
   const m = (PAYMENT_METHODS as readonly string[]).includes(method) ? method : "Tunai";
   // Lunasi: paid_amount = total, dan naikkan status dari belum_bayar -> dibayar.
   await q`UPDATE orders o SET
-      paid_amount = GREATEST(o.paid_amount, COALESCE((SELECT SUM(i.price * i.qty) FROM order_items i WHERE i.order_id = o.id), 0) + o.fee * o.fee_qty + o.box_fee * o.box_qty + o.shipping),
+      paid_amount = GREATEST(o.paid_amount, COALESCE((SELECT SUM((i.price + i.fee) * i.qty) FROM order_items i WHERE i.order_id = o.id), 0) + o.shipping),
       payment_method = ${m},
       status = CASE WHEN o.status = 'belum_bayar' THEN 'dibayar' ELSE o.status END,
       updated_at = now()

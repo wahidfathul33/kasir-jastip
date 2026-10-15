@@ -34,9 +34,9 @@ export type Period = {
   end_date: string | null;
   is_active: boolean;
 };
-export type Product = { id: number; name: string; price: number; is_active: boolean };
+export type Product = { id: number; name: string; price: number; fee: number; is_active: boolean };
 export type Customer = { id: number; name: string; phone: string; address: string };
-export type OrderItem = { id: number; product_id: number | null; name: string; price: number; qty: number };
+export type OrderItem = { id: number; product_id: number | null; name: string; note: string; price: number; fee: number; qty: number };
 export type Order = {
   id: number;
   period_id: number | null;
@@ -44,14 +44,11 @@ export type Order = {
   customer_id: number | null;
   customer_name: string;
   status: Status;
-  fee: number; // tarif jasa satuan
-  fee_qty: number;
-  box_fee: number; // tarif jasa per box
-  box_qty: number;
   shipping: number;
   paid_amount: number;
   payment_method: string;
   note: string;
   created_at: string | Date;
-  subtotal: number;
+  subtotal: number; // total barang
+  fee_total: number; // total jasa (jasa per barang x qty)
 };

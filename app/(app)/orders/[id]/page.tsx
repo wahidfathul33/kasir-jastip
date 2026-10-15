@@ -6,7 +6,7 @@ import PrintButton from "@/components/PrintButton";
 import StatusBadge from "@/components/StatusBadge";
 import { deleteOrder, payOrder, setOrderStatus } from "@/lib/actions";
 import { orderCode, rupiah } from "@/lib/format";
-import { feeTotal, getOrder, getSettings, orderTotal } from "@/lib/queries";
+import { getOrder, getSettings, orderTotal } from "@/lib/queries";
 import { PAYMENT_METHODS, STATUSES, STATUS_LABEL } from "@/lib/types";
 
 export default async function OrderPage({
@@ -40,7 +40,7 @@ export default async function OrderPage({
           </div>
           <div className="text-sm text-slate-600">Customer: <b>{order.customer_name}</b></div>
           <div className="text-sm text-slate-600">Periode: {order.period_name ?? "-"}</div>
-          <div className="text-sm text-slate-600">Barang: {rupiah(order.subtotal)} · Jasa: {rupiah(feeTotal(order))} ({[order.fee * order.fee_qty > 0 && `${order.fee_qty} x ${rupiah(order.fee)}`, order.box_fee * order.box_qty > 0 && `${order.box_qty} box x ${rupiah(order.box_fee)}`].filter(Boolean).join(" + ") || "-"}){order.shipping > 0 && <> · Ongkir: {rupiah(order.shipping)}</>}</div>
+          <div className="text-sm text-slate-600">Barang: {rupiah(order.subtotal)} · Jasa: {rupiah(order.fee_total)}{order.shipping > 0 && <> · Ongkir: {rupiah(order.shipping)}</>}</div>
           <div className="text-sm text-slate-600">Total: <b>{rupiah(total)}</b> · Dibayar: {rupiah(order.paid_amount)} ({order.payment_method})</div>
           {unpaid && <div className="text-sm font-medium text-red-600">Kurang {rupiah(total - order.paid_amount)}</div>}
         </div>

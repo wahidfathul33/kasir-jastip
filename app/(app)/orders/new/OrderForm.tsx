@@ -7,10 +7,10 @@ import MoneyInput from "@/components/MoneyInput";
 import { rupiah } from "@/lib/format";
 import { PAYMENT_METHODS, type Customer, type Order, type OrderItem, type Period, type Product } from "@/lib/types";
 
-type Line = { key: number; productId: number | null; name: string; price: string; qty: string };
+type Line = { key: number; productId: number | null; name: string; note: string; price: string; fee: string; qty: string };
 
 let seq = 1;
-const emptyLine = (): Line => ({ key: seq++, productId: null, name: "", price: "", qty: "1" });
+const emptyLine = (): Line => ({ key: seq++, productId: null, name: "", note: "", price: "", fee: "", qty: "1" });
 const toInt = (v: string) => {
   const n = Math.round(Number(v.replace(/[^\d]/g, "")));
   return Number.isFinite(n) ? n : 0;
@@ -38,22 +38,17 @@ export default function OrderForm({
   const [periodId, setPeriodId] = useState<string>(o ? (o.period_id ? String(o.period_id) : "") : defaultPeriodId ? String(defaultPeriodId) : "");
   const [lines, setLines] = useState<Line[]>(
     editing
-      ? editing.items.map((i) => ({ key: seq++, productId: i.product_id, name: i.name, price: String(i.price), qty: String(i.qty) }))
+      ? editing.items.map((i) => ({ key: seq++, productId: i.product_id, name: i.name, note: i.note, price: String(i.price), fee: String(i.fee), qty: String(i.qty) }))
       : [emptyLine()],
   );
-  const [fee, setFee] = useState(String(o?.fee ?? 0));
-  const [feeQty, setFeeQty] = useState(String(o?.fee_qty ?? 1));
-  const [boxFee, setBoxFee] = useState(String(o?.box_fee ?? 15000));
-  const [boxQty, setBoxQty] = useState(String(o?.box_qty ?? 0));
   const [shipping, setShipping] = useState(String(o?.shipping ?? 0));
   const [paid, setPaid] = useState(String(o?.paid_amount ?? 0));
   const [method, setMethod] = useState<string>(o?.payment_method ?? "Tunai");
   const [note, setNote] = useState(o?.note ?? "");
 
   const subtotal = useMemo(() => lines.reduce((s, l) => s + toInt(l.price) * (toInt(l.qty) || 0), 0), [lines]);
-  const feeSum = toInt(fee) * toInt(feeQty);
-  const boxSum = toInt(boxFee) * toInt(boxQty);
-  const total = subtotal + feeSum + boxSum + toInt(shipping);
+  const feeSum = useMemo(() => lines.reduce((s, l) => s + toInt(l.fee) * (toInt(l.qty) || 0), 0), [lines]);
+  const total = subtotal + feeSum + toInt(shipping);
   const diff = toInt(paid) - total;
 
   const update = (key: number, patch: Partial<Line>) =>
@@ -61,7 +56,7 @@ export default function OrderForm({
 
   function pickProduct(key: number, value: string) {
     const p = products.find((x) => String(x.id) === value);
-    if (p) update(key, { productId: p.id, name: p.name, price: String(p.price) });
+    if (p) update(key, { productId: p.id, name: p.name, price: String(p.price), fee: String(p.fee) });
     else update(key, { productId: null });
   }
 
@@ -69,7 +64,7 @@ export default function OrderForm({
     setError("");
     const items = lines
       .filter((l) => l.name.trim())
-      .map((l) => ({ productId: l.productId, name: l.name.trim(), price: toInt(l.price), qty: toInt(l.qty) }));
+      .map((l) => ({ productId: l.productId, name: l.name.trim(), note: l.note.trim(), price: toInt(l.price), fee: toInt(l.fee), qty: toInt(l.qty) }));
     if (items.length === 0) return setError("Tambahkan minimal satu barang");
     if (items.some((i) => i.qty < 1)) return setError("Jumlah barang minimal 1");
     start(async () => {
@@ -78,10 +73,6 @@ export default function OrderForm({
         customerName,
         periodId: periodId ? Number(periodId) : null,
         items,
-        fee: toInt(fee),
-        feeQty: toInt(feeQty),
-        boxFee: toInt(boxFee),
-        boxQty: toInt(boxQty),
         shipping: toInt(shipping),
         paid: toInt(paid),
         method,
@@ -125,28 +116,36 @@ export default function OrderForm({
           <h2 className="font-semibold">Barang</h2>
           {lines.map((l) => (
             <div key={l.key} className="grid grid-cols-12 items-end gap-2 border-b border-slate-100 pb-3">
-              <div className="col-span-12 sm:col-span-4">
+              <div className="col-span-12 sm:col-span-4 lg:col-span-3">
                 <label className="label">Produk</label>
                 <select className="input" value={l.productId ?? ""} onChange={(e) => pickProduct(l.key, e.target.value)}>
                   <option value="">— Barang manual —</option>
                   {products.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
                 </select>
               </div>
-              <div className="col-span-12 sm:col-span-8 lg:col-span-4">
+              <div className="col-span-12 sm:col-span-8 lg:col-span-3">
                 <label className="label">Nama barang</label>
                 <input className="input" value={l.name} onChange={(e) => update(l.key, { name: e.target.value, productId: null })} />
               </div>
-              <div className="col-span-6 sm:col-span-4 lg:col-span-2">
+              <div className="col-span-6 sm:col-span-3 lg:col-span-2">
                 <label className="label">Harga</label>
                 <MoneyInput value={l.price} onValueChange={(v) => update(l.key, { price: v })} />
               </div>
-              <div className="col-span-3 lg:col-span-1">
+              <div className="col-span-6 sm:col-span-3 lg:col-span-2">
+                <label className="label">Jasa</label>
+                <MoneyInput value={l.fee} onValueChange={(v) => update(l.key, { fee: v })} placeholder="0" />
+              </div>
+              <div className="col-span-6 sm:col-span-3 lg:col-span-1">
                 <label className="label">Qty</label>
                 <input className="input" inputMode="numeric" value={l.qty} onChange={(e) => update(l.key, { qty: e.target.value.replace(/[^\d]/g, "") })} />
               </div>
-              <div className="col-span-3 lg:col-span-1">
+              <div className="col-span-6 sm:col-span-3 lg:col-span-1">
                 <button type="button" className="btn-danger w-full" aria-label="Hapus baris"
                   onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [emptyLine()]))}>✕</button>
+              </div>
+              <div className="col-span-12">
+                <label className="label">Catatan barang (detail jenis, mis. isi 1 box)</label>
+                <input className="input" value={l.note} onChange={(e) => update(l.key, { note: e.target.value })} placeholder="Opsional" />
               </div>
             </div>
           ))}
@@ -157,29 +156,7 @@ export default function OrderForm({
       <div className="card h-fit space-y-3">
         <h2 className="font-semibold">Pembayaran</h2>
         <div className="flex justify-between text-sm"><span>Total barang</span><span>{rupiah(subtotal)}</span></div>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="col-span-2">
-            <label className="label" htmlFor="fee">Biaya jasa satuan</label>
-            <MoneyInput id="fee" value={fee} onValueChange={setFee} />
-          </div>
-          <div>
-            <label className="label" htmlFor="feeqty">Qty satuan</label>
-            <input id="feeqty" className="input" inputMode="numeric" value={feeQty} onChange={(e) => setFeeQty(e.target.value.replace(/[^\d]/g, ""))} />
-          </div>
-        </div>
-        <div className="flex justify-between text-sm"><span>Jasa satuan ({toInt(feeQty)} x {rupiah(toInt(fee))})</span><span>{rupiah(feeSum)}</span></div>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="col-span-2">
-            <label className="label" htmlFor="boxfee">Biaya jasa box</label>
-            <MoneyInput id="boxfee" value={boxFee} onValueChange={setBoxFee} />
-          </div>
-          <div>
-            <label className="label" htmlFor="boxqty">Qty box</label>
-            <input id="boxqty" className="input" inputMode="numeric" value={boxQty} onChange={(e) => setBoxQty(e.target.value.replace(/[^\d]/g, ""))} />
-          </div>
-        </div>
-        <div className="flex justify-between text-sm"><span>Jasa box ({toInt(boxQty)} x {rupiah(toInt(boxFee))})</span><span>{rupiah(boxSum)}</span></div>
-        <div className="flex justify-between text-sm font-medium"><span>Total jasa</span><span>{rupiah(feeSum + boxSum)}</span></div>
+        <div className="flex justify-between text-sm"><span>Total jasa</span><span>{rupiah(feeSum)}</span></div>
         <div>
           <label className="label" htmlFor="ship">Ongkir</label>
           <MoneyInput id="ship" value={shipping} onValueChange={setShipping} />
