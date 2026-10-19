@@ -31,6 +31,15 @@ export default function Receipt({ order, items, settings }: { order: Order; item
           <div key={i.id} style={{ marginBottom: 3 }}>
             <div style={{ wordBreak: "break-word" }}>{i.name}</div>
             {i.note && <div style={{ wordBreak: "break-word", fontSize: 11 }}>&nbsp;&nbsp;({i.note})</div>}
+            {i.sub_items.map((s, n) => (
+              <div key={n} style={{ fontSize: 11, paddingLeft: "1.2em" }}>
+                <div style={{ wordBreak: "break-word" }}>- {s.name}</div>
+                <div className="row" style={{ paddingLeft: "1.2em" }}>
+                  <span>{s.qty} x {num(s.price)}</span>
+                  <span>{num(s.price * s.qty)}</span>
+                </div>
+              </div>
+            ))}
             <div className="row">
               <span>&nbsp;&nbsp;{i.qty} x {num(i.price)}</span>
               <span>{num(i.price * i.qty)}</span>

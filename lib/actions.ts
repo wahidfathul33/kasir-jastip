@@ -134,7 +134,7 @@ export type NewOrderInput = {
   customerId: number | null;
   customerName: string;
   periodId: number | null;
-  items: { productId: number | null; name: string; note?: string; price: number; fee?: number; qty: number }[];
+  items: { productId: number | null; name: string; note?: string; price: number; fee?: number; qty: number; subItems?: { name: string; price: number; qty: number }[] }[];
   shipping: number;
   paid: number;
   method: string;
@@ -148,18 +148,28 @@ const clampInt = (n: unknown, max = 2_000_000_000) => {
 
 async function parseOrder(input: NewOrderInput) {
   const items = (input.items ?? [])
-    .map((i) => ({
-      product_id: i.productId && Number.isInteger(i.productId) ? i.productId : null,
-      name: String(i.name ?? "").trim().slice(0, 120),
-      note: String(i.note ?? "").trim().slice(0, 200),
-      price: clampInt(i.price),
-      fee: clampInt(i.fee ?? 0),
-      qty: clampInt(i.qty, 100000),
-    }))
+    .map((i) => {
+      const sub_items = (i.subItems ?? [])
+        .map((s) => ({ name: String(s.name ?? "").trim().slice(0, 120), price: clampInt(s.price), qty: clampInt(s.qty, 100000) }))
+        .filter((s) => s.name);
+      // Barang yang punya isi: harga dihitung dari isinya, bukan dari input.
+      const price = sub_items.length ? sub_items.reduce((t, s) => t + s.price * s.qty, 0) : clampInt(i.price);
+      return {
+        product_id: i.productId && Number.isInteger(i.productId) ? i.productId : null,
+        name: String(i.name ?? "").trim().slice(0, 120),
+        note: String(i.note ?? "").trim().slice(0, 200),
+        price: price <= 2_000_000_000 ? price : NaN,
+        fee: clampInt(i.fee ?? 0),
+        qty: clampInt(i.qty, 100000),
+        sub_items,
+      };
+    })
     .filter((i) => i.name);
   if (items.length === 0) return { error: "Tambahkan minimal satu barang" };
   if (items.some((i) => Number.isNaN(i.price) || Number.isNaN(i.fee) || Number.isNaN(i.qty) || i.qty < 1))
     return { error: "Harga, jasa, atau jumlah barang tidak valid" };
+  if (items.some((i) => i.sub_items.some((s) => Number.isNaN(s.price) || Number.isNaN(s.qty) || s.qty < 1)))
+    return { error: "Harga atau jumlah isi box tidak valid" };
 
   const shipping = clampInt(input.shipping);
   const paid = clampInt(input.paid);
@@ -192,8 +202,8 @@ export async function createOrder(input: NewOrderInput): Promise<{ id?: number; 
       VALUES (${d.periodId}, ${d.customerId}, ${d.customerName}, ${d.status}, ${d.shipping}, ${d.paid}, ${d.method}, ${d.note})
       RETURNING id
     )
-    INSERT INTO order_items (order_id, product_id, name, note, price, fee, qty)
-    SELECT o.id, (i->>'product_id')::int, i->>'name', i->>'note', (i->>'price')::int, (i->>'fee')::int, (i->>'qty')::int
+    INSERT INTO order_items (order_id, product_id, name, note, price, fee, qty, sub_items)
+    SELECT o.id, (i->>'product_id')::int, i->>'name', i->>'note', (i->>'price')::int, (i->>'fee')::int, (i->>'qty')::int, COALESCE(i->'sub_items', '[]'::jsonb)
     FROM o, jsonb_array_elements(${JSON.stringify(d.items)}::jsonb) AS i
     RETURNING order_id`;
   revalidatePath("/");
@@ -216,8 +226,8 @@ export async function updateOrder(id: number, input: NewOrderInput): Promise<{ i
     ), del AS (
       DELETE FROM order_items WHERE order_id IN (SELECT id FROM o)
     )
-    INSERT INTO order_items (order_id, product_id, name, note, price, fee, qty)
-    SELECT o.id, (i->>'product_id')::int, i->>'name', i->>'note', (i->>'price')::int, (i->>'fee')::int, (i->>'qty')::int
+    INSERT INTO order_items (order_id, product_id, name, note, price, fee, qty, sub_items)
+    SELECT o.id, (i->>'product_id')::int, i->>'name', i->>'note', (i->>'price')::int, (i->>'fee')::int, (i->>'qty')::int, COALESCE(i->'sub_items', '[]'::jsonb)
     FROM o, jsonb_array_elements(${JSON.stringify(d.items)}::jsonb) AS i
     RETURNING order_id`;
   if (!rows[0]) return { error: "Pesanan tidak bisa diedit karena sudah dibayar atau tidak ditemukan" };

@@ -47,7 +47,7 @@ export async function getOrder(id: number) {
     FROM orders o LEFT JOIN periods p ON p.id = o.period_id
     WHERE o.id = ${id}`;
   if (!rows[0]) return null;
-  const items = await q<OrderItem>`SELECT id, product_id, name, note, price, fee, qty FROM order_items WHERE order_id = ${id} ORDER BY id`;
+  const items = await q<OrderItem>`SELECT id, product_id, name, note, price, fee, qty, sub_items FROM order_items WHERE order_id = ${id} ORDER BY id`;
   return { order: rows[0], items };
 }
 

@@ -66,6 +66,7 @@ const statements = [
   `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS note text NOT NULL DEFAULT ''`,
   `ALTER TABLE products ADD COLUMN IF NOT EXISTS fee integer NOT NULL DEFAULT 0 CHECK (fee >= 0)`,
   `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS fee integer NOT NULL DEFAULT 0 CHECK (fee >= 0)`,
+  `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sub_items jsonb NOT NULL DEFAULT '[]'::jsonb`,
   `CREATE INDEX IF NOT EXISTS orders_period_idx ON orders(period_id)`,
   `CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status)`,
   `CREATE INDEX IF NOT EXISTS order_items_order_idx ON order_items(order_id)`,

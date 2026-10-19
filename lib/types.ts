@@ -36,7 +36,9 @@ export type Period = {
 };
 export type Product = { id: number; name: string; price: number; fee: number; is_active: boolean };
 export type Customer = { id: number; name: string; phone: string; address: string };
-export type OrderItem = { id: number; product_id: number | null; name: string; note: string; price: number; fee: number; qty: number };
+// Isi box (opsional): harga barang box = jumlah (price x qty) seluruh isinya.
+export type SubItem = { name: string; price: number; qty: number };
+export type OrderItem = { id: number; product_id: number | null; name: string; note: string; price: number; fee: number; qty: number; sub_items: SubItem[] };
 export type Order = {
   id: number;
   period_id: number | null;
