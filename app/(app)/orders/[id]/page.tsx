@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import ConfirmButton from "@/components/ConfirmButton";
 import Receipt from "@/components/Receipt";
 import PrintButton from "@/components/PrintButton";
+import DownloadReceipt from "@/components/DownloadReceipt";
 import StatusBadge from "@/components/StatusBadge";
 import { deleteOrder, payOrder, setOrderStatus } from "@/lib/actions";
 import { orderCode, rupiah } from "@/lib/format";
@@ -73,6 +74,7 @@ export default async function OrderPage({
 
         <div className="flex flex-wrap gap-2">
           <PrintButton auto={!!baru} />
+          <DownloadReceipt filename={`nota-${orderCode(order.id, order.created_at)}`} widthMm={settings.paper_width === 58 ? 58 : 80} />
           {order.status === "belum_bayar" && <Link href={`/orders/${order.id}/edit`} className="btn-ghost">Edit pesanan</Link>}
           {canDelete ? (
             <form action={deleteOrder}>
