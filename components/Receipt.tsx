@@ -65,7 +65,7 @@ export default function Receipt({ order, items, settings }: { order: Order; item
         <div style={{ textAlign: "center" }}>
           <div style={{ fontWeight: 700 }}>Bayar via QRIS</div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/qris.png" alt="QRIS" style={{ width: "85%", margin: "4px auto 0", display: "block" }} />
+          <img src="/qris.png" alt="QRIS" style={{ width: "55%", margin: "4px auto 0", display: "block" }} />
         </div>
       </div>
     </>
