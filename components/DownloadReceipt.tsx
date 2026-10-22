@@ -59,6 +59,27 @@ function jpegToPdf(jpeg: Uint8Array, imgW: number, imgH: number, widthMm: number
   return new Blob(parts as BlobPart[], { type: "application/pdf" });
 }
 
+// html-to-image mengunduh ulang tiap <img> sendiri dan diam-diam mengosongkannya bila gagal.
+// Ganti sementara ke data URL yang sudah ter-decode agar QRIS pasti ikut tergambar.
+async function inlineImages(root: HTMLElement) {
+  const restore: (() => void)[] = [];
+  for (const img of root.querySelectorAll("img")) {
+    if (img.src.startsWith("data:")) continue;
+    const blob = await (await fetch(img.src, { credentials: "same-origin" })).blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+    const original = img.src;
+    img.src = dataUrl;
+    await img.decode();
+    restore.push(() => { img.src = original; });
+  }
+  return () => restore.forEach((fn) => fn());
+}
+
 export default function DownloadReceipt({ filename, widthMm }: { filename: string; widthMm: number }) {
   const [busy, setBusy] = useState<"png" | "pdf" | null>(null);
   const [open, setOpen] = useState(false);
@@ -68,7 +89,9 @@ export default function DownloadReceipt({ filename, widthMm }: { filename: strin
     setOpen(false);
     if (!el) return;
     setBusy(kind);
+    let restoreImages = () => {};
     try {
+      restoreImages = await inlineImages(el);
       // margin: auto pada nota ikut tersalin sebagai px besar dan menggeser isi keluar kanvas.
       const canvas = await toCanvas(el, { pixelRatio: 3, backgroundColor: "#ffffff", style: { margin: "0" } });
       if (kind === "png") {
@@ -80,6 +103,7 @@ export default function DownloadReceipt({ filename, widthMm }: { filename: strin
     } catch {
       alert("Gagal membuat file nota. Coba lagi.");
     } finally {
+      restoreImages();
       setBusy(null);
     }
   }
