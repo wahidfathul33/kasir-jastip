@@ -61,6 +61,12 @@ export default function Receipt({ order, items, settings }: { order: Order; item
           {order.note && <div>Catatan: {order.note}</div>}
           {settings.footer_note && <div style={{ marginTop: 4 }}>{settings.footer_note}</div>}
         </div>
+        <div className="sep" />
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontWeight: 700 }}>Bayar via QRIS</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/qris.png" alt="QRIS" style={{ width: "85%", margin: "4px auto 0", display: "block" }} />
+        </div>
       </div>
     </>
   );
